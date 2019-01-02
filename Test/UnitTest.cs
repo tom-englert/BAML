@@ -33,14 +33,14 @@ namespace Test
 
                     var bamlStream = (Stream)entry.Value;
 
-                    var doc = Baml.ReadDocument(bamlStream);
+                    var records = Baml.ReadDocument(bamlStream);
 
-                    foreach (var referencedAssembly in doc.Records.OfType<AssemblyInfoRecord>().Select(ai => new AssemblyName(ai.AssemblyFullName).Name))
+                    foreach (var referencedAssembly in records.OfType<AssemblyInfoRecord>().Select(ai => new AssemblyName(ai.AssemblyFullName).Name))
                     {
                         referencedAssemblies.Add(referencedAssembly);
                     }
 
-                    foreach (var usedType in doc.Records.OfType<TypeInfoRecord>().Select(ti => ti.TypeFullName.Split('.').Last()))
+                    foreach (var usedType in records.OfType<TypeInfoRecord>().Select(ti => ti.TypeFullName.Split('.').Last()))
                     {
                         usedTypes.Add(usedType);
                     }

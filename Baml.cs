@@ -3,49 +3,16 @@
 // ReSharper disable UnusedAutoPropertyAccessor.Global
 // ReSharper disable MemberCanBePrivate.Global
 // ReSharper disable MemberCanBeProtected.Global
+// ReSharper disable CollectionNeverQueried.Global
 namespace Baml
 {
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
-    using System.Text;
+    using System.Linq;
 
     using JetBrains.Annotations;
-
-    internal struct BamlVersion
-    {
-        public ushort Major;
-        public ushort Minor;
-    }
-
-    internal class BamlDocument
-    {
-        public BamlDocument(Stream bamlStream)
-        {
-            using (var rdr = new BinaryReader(bamlStream, Encoding.Unicode, true))
-            {
-                var len = rdr.ReadUInt32();
-
-                Signature = new string(rdr.ReadChars((int)(len >> 1)));
-
-                if (Signature != "MSBAML")
-                    throw new NotSupportedException();
-
-                rdr.ReadBytes((int)(((len + 3) & ~3) - len));
-            }
-        }
-
-        [NotNull]
-        public string Signature { get; }
-
-        public BamlVersion ReaderVersion { get; set; }
-        public BamlVersion UpdaterVersion { get; set; }
-        public BamlVersion WriterVersion { get; set; }
-
-        [NotNull, ItemNotNull]
-        public IList<BamlRecord> Records { get; } = new List<BamlRecord>();
-    }
 
     internal class BamlElement
     {
@@ -56,9 +23,9 @@ namespace Baml
 
         [NotNull]
         public BamlRecord Header { get; }
-        [NotNull]
+        [NotNull, ItemNotNull]
         public IList<BamlRecord> Body { get; } = new List<BamlRecord>();
-        [NotNull]
+        [NotNull, ItemNotNull]
         public IList<BamlElement> Children { get; } = new List<BamlElement>();
 
         public BamlElement Parent { get; private set; }
@@ -138,10 +105,8 @@ namespace Baml
             }
         }
 
-        public static BamlElement Read([NotNull] BamlDocument document)
+        public static BamlElement Read([NotNull, ItemNotNull] IList<BamlRecord> records)
         {
-            var records = document.Records;
-
             Debug.Assert(records.Count > 0 && records[0].Type == BamlRecordType.DocumentStart);
 
             BamlElement current = null;
@@ -259,6 +224,57 @@ namespace Baml
         public long Position { get; internal set; }
         public abstract void Read(BamlBinaryReader reader);
         public abstract void Write(BamlBinaryWriter writer);
+
+        public virtual void ReadDeferred([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] IDictionary<long, BamlRecord> recordsByPosition) { }
+        public virtual void WriteDeferred([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] BamlBinaryWriter writer) { }
+
+        protected static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, ref int index)
+        {
+            while (true)
+            {
+                switch (records[index].Type)
+                {
+                    case BamlRecordType.DefAttributeKeyString:
+                    case BamlRecordType.DefAttributeKeyType:
+                    case BamlRecordType.OptimizedStaticResource:
+                        break;
+
+                    case BamlRecordType.StaticResourceStart:
+                        NavigateTree(records, BamlRecordType.StaticResourceStart, BamlRecordType.StaticResourceEnd, ref index);
+                        break;
+
+                    case BamlRecordType.KeyElementStart:
+                        NavigateTree(records, BamlRecordType.KeyElementStart, BamlRecordType.KeyElementEnd, ref index);
+                        break;
+
+                    default:
+                        return;
+                }
+
+                index++;
+            }
+        }
+
+        private static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, BamlRecordType start, BamlRecordType end, ref int index)
+        {
+            index++;
+
+            while (true) //Assume there always is a end
+            {
+                var recordType = records[index].Type;
+
+                if (recordType == start)
+                {
+                    NavigateTree(records, start, end, ref index);
+                }
+                else if (recordType == end)
+                {
+                    return;
+                }
+
+                index++;
+            }
+        }
     }
 
     internal abstract class SizedBamlRecord : BamlRecord
@@ -308,18 +324,14 @@ namespace Baml
         protected abstract void WriteData(BamlBinaryWriter writer);
     }
 
-    internal interface IBamlDeferRecord
-    {
-        void ReadDefer([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] Func<long, BamlRecord> resolve);
-        void WriteDefer([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] BamlBinaryWriter wtr);
-    }
-
     internal class XmlnsPropertyRecord : SizedBamlRecord
     {
         public override BamlRecordType Type => BamlRecordType.XmlnsProperty;
 
-        public string Prefix { get; set; }
-        public string XmlNamespace { get; set; }
+        [NotNull]
+        public string Prefix { get; set; } = string.Empty;
+        [NotNull]
+        public string XmlNamespace { get; set; } = string.Empty;
         [NotNull]
         public ushort[] AssemblyIds { get; set; } = Array.Empty<ushort>();
 
@@ -346,7 +358,8 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.PresentationOptionsAttribute;
 
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
         public ushort NameId { get; set; }
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
@@ -366,8 +379,10 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.PIMapping;
 
-        public string XmlNamespace { get; set; }
-        public string ClrNamespace { get; set; }
+        [NotNull]
+        public string XmlNamespace { get; set; } = string.Empty;
+        [NotNull]
+        public string ClrNamespace { get; set; } = string.Empty;
         public ushort AssemblyId { get; set; }
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
@@ -390,7 +405,8 @@ namespace Baml
         public override BamlRecordType Type => BamlRecordType.AssemblyInfo;
 
         public ushort AssemblyId { get; set; }
-        public string AssemblyFullName { get; set; }
+        [NotNull]
+        public string AssemblyFullName { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -410,7 +426,9 @@ namespace Baml
         public override BamlRecordType Type => BamlRecordType.Property;
 
         public ushort AttributeId { get; set; }
-        public string Value { get; set; }
+
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -450,7 +468,8 @@ namespace Baml
 
         public ushort AttributeId { get; set; }
         public ushort SerializerTypeId { get; set; }
-        public byte[] Data { get; set; }
+        [NotNull]
+        public byte[] Data { get; set; } = Array.Empty<byte>();
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -472,7 +491,8 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.DefAttribute;
 
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
         public ushort NameId { get; set; }
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
@@ -488,9 +508,9 @@ namespace Baml
         }
     }
 
-    internal class DefAttributeKeyStringRecord : SizedBamlRecord, IBamlDeferRecord
+    internal class DefAttributeKeyStringRecord : SizedBamlRecord
     {
-        internal uint pos = 0xffffffff;
+        private uint _position = 0xffffffff;
 
         public override BamlRecordType Type => BamlRecordType.DefAttributeKeyString;
 
@@ -500,73 +520,28 @@ namespace Baml
 
         public BamlRecord Record { get; set; }
 
-        public void ReadDefer(IList<BamlRecord> records, int index, Func<long, BamlRecord> resolve)
+        public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
-            var keys = true;
-            do
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                switch (records[index].Type)
-                {
-                    case BamlRecordType.DefAttributeKeyString:
-                    case BamlRecordType.DefAttributeKeyType:
-                    case BamlRecordType.OptimizedStaticResource:
-                        break;
-                    case BamlRecordType.StaticResourceStart:
-                        NavigateTree(records, BamlRecordType.StaticResourceStart, BamlRecordType.StaticResourceEnd, ref index);
-                        break;
-                    case BamlRecordType.KeyElementStart:
-                        NavigateTree(records, BamlRecordType.KeyElementStart, BamlRecordType.KeyElementEnd, ref index);
-                        break;
-                    default:
-                        keys = false;
-                        index--;
-                        break;
-                }
-                index++;
-            } while (keys);
+            NavigateTree(records, ref index);
 
-            // ReSharper disable once PossibleNullReferenceException
-            Record = resolve(records[index].Position + pos);
+            Record = recordsByPosition[records[index].Position + _position];
         }
 
-        public void WriteDefer(IList<BamlRecord> records, int index, BamlBinaryWriter wtr)
+        public override void WriteDeferred(IList<BamlRecord> records, int index, BamlBinaryWriter writer)
         {
             if (Record == null)
                 throw new InvalidOperationException("Invalid record state");
 
-            var keys = true;
-            do
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                switch (records[index].Type)
-                {
-                    case BamlRecordType.DefAttributeKeyString:
-                    case BamlRecordType.DefAttributeKeyType:
-                    case BamlRecordType.OptimizedStaticResource:
-                        break;
-                    case BamlRecordType.StaticResourceStart:
-                        NavigateTree(records, BamlRecordType.StaticResourceStart, BamlRecordType.StaticResourceEnd, ref index);
-                        break;
-                    case BamlRecordType.KeyElementStart:
-                        NavigateTree(records, BamlRecordType.KeyElementStart, BamlRecordType.KeyElementEnd, ref index);
-                        break;
-                    default:
-                        keys = false;
-                        index--;
-                        break;
-                }
-                index++;
-            } while (keys);
-            wtr.BaseStream.Seek(pos, SeekOrigin.Begin);
-            // ReSharper disable once PossibleNullReferenceException
-            wtr.Write((uint)(Record.Position - records[index].Position));
+            NavigateTree(records, ref index);
+
+            writer.BaseStream.Seek(_position, SeekOrigin.Begin);
+            writer.Write((uint)(Record.Position - records[index].Position));
         }
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
             ValueId = reader.ReadUInt16();
-            pos = reader.ReadUInt32();
+            _position = reader.ReadUInt32();
             Shared = reader.ReadBoolean();
             SharedSet = reader.ReadBoolean();
         }
@@ -574,24 +549,10 @@ namespace Baml
         protected override void WriteData([NotNull] BamlBinaryWriter writer)
         {
             writer.Write(ValueId);
-            pos = (uint)writer.BaseStream.Position;
+            _position = (uint)writer.BaseStream.Position;
             writer.Write((uint)0);
             writer.Write(Shared);
             writer.Write(SharedSet);
-        }
-
-        private static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, BamlRecordType start, BamlRecordType end, ref int index)
-        {
-            index++;
-            while (true) //Assume there always is a end
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                if (records[index].Type == start)
-                    NavigateTree(records, start, end, ref index);
-                else if (records[index].Type == end)
-                    return;
-                index++;
-            }
         }
     }
 
@@ -601,7 +562,9 @@ namespace Baml
 
         public ushort TypeId { get; set; }
         public ushort AssemblyId { get; set; }
-        public string TypeFullName { get; set; }
+        
+        [NotNull]
+        public string TypeFullName { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -644,7 +607,8 @@ namespace Baml
         public ushort AttributeId { get; set; }
         public ushort OwnerTypeId { get; set; }
         public byte AttributeUsage { get; set; }
-        public string Name { get; set; }
+        [NotNull]
+        public string Name { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -668,7 +632,8 @@ namespace Baml
         public override BamlRecordType Type => BamlRecordType.StringInfo;
 
         public ushort StringId { get; set; }
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -687,7 +652,8 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.Text;
 
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
         {
@@ -740,7 +706,8 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.LiteralContent;
 
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
         public uint Reserved0 { get; set; }
         public uint Reserved1 { get; set; }
 
@@ -763,7 +730,8 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.RoutedEvent;
 
-        public string Value { get; set; }
+        [NotNull]
+        public string Value { get; set; } = string.Empty;
         public ushort AttributeId { get; set; }
 
         protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
@@ -965,9 +933,9 @@ namespace Baml
         }
     }
 
-    internal class DefAttributeKeyTypeRecord : ElementStartRecord, IBamlDeferRecord
+    internal class DefAttributeKeyTypeRecord : ElementStartRecord
     {
-        internal uint pos = 0xffffffff;
+        private uint _position = 0xffffffff;
 
         public override BamlRecordType Type => BamlRecordType.DefAttributeKeyType;
 
@@ -976,73 +944,28 @@ namespace Baml
 
         public BamlRecord Record { get; set; }
 
-        public void ReadDefer(IList<BamlRecord> records, int index, Func<long, BamlRecord> resolve)
+        public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
-            var keys = true;
-            do
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                switch (records[index].Type)
-                {
-                    case BamlRecordType.DefAttributeKeyString:
-                    case BamlRecordType.DefAttributeKeyType:
-                    case BamlRecordType.OptimizedStaticResource:
-                        break;
-                    case BamlRecordType.StaticResourceStart:
-                        NavigateTree(records, BamlRecordType.StaticResourceStart, BamlRecordType.StaticResourceEnd, ref index);
-                        break;
-                    case BamlRecordType.KeyElementStart:
-                        NavigateTree(records, BamlRecordType.KeyElementStart, BamlRecordType.KeyElementEnd, ref index);
-                        break;
-                    default:
-                        keys = false;
-                        index--;
-                        break;
-                }
-                index++;
-            } while (keys);
+            NavigateTree(records, ref index);
 
-            // ReSharper disable once PossibleNullReferenceException
-            Record = resolve(records[index].Position + pos);
+            Record = recordsByPosition[records[index].Position + _position];
         }
 
-        public void WriteDefer(IList<BamlRecord> records, int index, BamlBinaryWriter wtr)
+        public override void WriteDeferred(IList<BamlRecord> records, int index, BamlBinaryWriter writer)
         {
             if (Record == null)
                 throw new InvalidOperationException("Invalid record state");
 
-            var keys = true;
-            do
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                switch (records[index].Type)
-                {
-                    case BamlRecordType.DefAttributeKeyString:
-                    case BamlRecordType.DefAttributeKeyType:
-                    case BamlRecordType.OptimizedStaticResource:
-                        break;
-                    case BamlRecordType.StaticResourceStart:
-                        NavigateTree(records, BamlRecordType.StaticResourceStart, BamlRecordType.StaticResourceEnd, ref index);
-                        break;
-                    case BamlRecordType.KeyElementStart:
-                        NavigateTree(records, BamlRecordType.KeyElementStart, BamlRecordType.KeyElementEnd, ref index);
-                        break;
-                    default:
-                        keys = false;
-                        index--;
-                        break;
-                }
-                index++;
-            } while (keys);
-            wtr.BaseStream.Seek(pos, SeekOrigin.Begin);
-            // ReSharper disable once PossibleNullReferenceException
-            wtr.Write((uint)(Record.Position - records[index].Position));
+            NavigateTree(records, ref index);
+
+            writer.BaseStream.Seek(_position, SeekOrigin.Begin);
+            writer.Write((uint)(Record.Position - records[index].Position));
         }
 
         public override void Read(BamlBinaryReader reader)
         {
             base.Read(reader);
-            pos = reader.ReadUInt32();
+            _position = reader.ReadUInt32();
             Shared = reader.ReadBoolean();
             SharedSet = reader.ReadBoolean();
         }
@@ -1050,24 +973,10 @@ namespace Baml
         public override void Write(BamlBinaryWriter writer)
         {
             base.Write(writer);
-            pos = (uint)writer.BaseStream.Position;
+            _position = (uint)writer.BaseStream.Position;
             writer.Write((uint)0);
             writer.Write(Shared);
             writer.Write(SharedSet);
-        }
-
-        private static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, BamlRecordType start, BamlRecordType end, ref int index)
-        {
-            index++;
-            while (true)
-            {
-                // ReSharper disable once PossibleNullReferenceException
-                if (records[index].Type == start)
-                    NavigateTree(records, start, end, ref index);
-                else if (records[index].Type == end)
-                    return;
-                index++;
-            }
         }
     }
 
@@ -1168,7 +1077,7 @@ namespace Baml
         }
     }
 
-    internal class DeferableContentStartRecord : BamlRecord, IBamlDeferRecord
+    internal class DeferableContentStartRecord : BamlRecord
     {
         private long pos;
         internal uint size = 0xffffffff;
@@ -1177,18 +1086,18 @@ namespace Baml
 
         public BamlRecord Record { get; set; }
 
-        public void ReadDefer(IList<BamlRecord> records, int index, Func<long, BamlRecord> resolve)
+        public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
-            Record = resolve(pos + size);
+            Record = recordsByPosition[pos + size];
         }
 
-        public void WriteDefer(IList<BamlRecord> records, int index, BamlBinaryWriter wtr)
+        public override void WriteDeferred(IList<BamlRecord> records, int index, BamlBinaryWriter writer)
         {
             if (Record == null)
                 throw new InvalidOperationException("Invalid record state");
 
-            wtr.BaseStream.Seek(pos, SeekOrigin.Begin);
-            wtr.Write((uint)(Record.Position - (pos + 4)));
+            writer.BaseStream.Seek(pos, SeekOrigin.Begin);
+            writer.Write((uint)(Record.Position - (pos + 4)));
         }
 
         public override void Read([NotNull] BamlBinaryReader reader)
@@ -1320,10 +1229,6 @@ namespace Baml
         {
         }
 
-        [NotNull]
-        // ReSharper disable once AssignNullToNotNullAttribute
-        public override Stream BaseStream => base.BaseStream;
-
         public int ReadEncodedInt()
         {
             return Read7BitEncodedInt();
@@ -1332,14 +1237,10 @@ namespace Baml
 
     internal class BamlBinaryWriter : BinaryWriter
     {
-        public BamlBinaryWriter(Stream stream)
+        public BamlBinaryWriter([NotNull] Stream stream)
             : base(stream)
         {
         }
-
-        [NotNull]
-        // ReSharper disable once AssignNullToNotNullAttribute
-        public override Stream BaseStream => base.BaseStream;
 
         public void WriteEncodedInt(int val)
         {
@@ -1350,250 +1251,241 @@ namespace Baml
     internal static class Baml
     {
         [NotNull]
-        public static BamlDocument ReadDocument([NotNull] Stream stream)
+        private static readonly byte[] _signature =
+        {
+            0x0C, 0x00, 0x00, 0x00, // strlen
+            
+            (byte)'M', 0x00,
+            (byte)'S', 0x00,
+            (byte)'B', 0x00,
+            (byte)'A', 0x00,
+            (byte)'M', 0x00,
+            (byte)'L', 0x00,
+
+            0x00, 0x00, 0x60, 0x00, // reader version
+            0x00, 0x00, 0x60, 0x00, // updater version
+            0x00, 0x00, 0x60, 0x00, // writer version
+        };
+
+        [NotNull]
+        public static IList<BamlRecord> ReadDocument([NotNull] Stream stream)
         {
             var reader = new BamlBinaryReader(stream);
 
-            var document = new BamlDocument(reader.BaseStream)
-            {
-                ReaderVersion = new BamlVersion { Major = reader.ReadUInt16(), Minor = reader.ReadUInt16() },
-                UpdaterVersion = new BamlVersion { Major = reader.ReadUInt16(), Minor = reader.ReadUInt16() },
-                WriterVersion = new BamlVersion { Major = reader.ReadUInt16(), Minor = reader.ReadUInt16() }
-            };
+            var rawSignature = reader.ReadBytes(_signature.Length);
 
-            if (document.ReaderVersion.Major != 0 || document.ReaderVersion.Minor != 0x60 ||
-                document.UpdaterVersion.Major != 0 || document.UpdaterVersion.Minor != 0x60 ||
-                document.WriterVersion.Major != 0 || document.WriterVersion.Minor != 0x60)
-            {
-                throw new NotSupportedException();
-            }
+            if (!rawSignature.SequenceEqual(_signature))
+                throw new NotSupportedException("Invalid signature");
 
-            var records = document.Records;
-            var recordsByIndex = new Dictionary<long, BamlRecord>();
+            var records = new List<BamlRecord>();
+            var recordsByPosition = new Dictionary<long, BamlRecord>();
 
             while (stream.Position < stream.Length)
             {
                 var pos = stream.Position;
                 var type = (BamlRecordType)reader.ReadByte();
-                BamlRecord record;
-                switch (type)
-                {
-                    case BamlRecordType.AssemblyInfo:
-                        record = new AssemblyInfoRecord();
-                        break;
-                    case BamlRecordType.AttributeInfo:
-                        record = new AttributeInfoRecord();
-                        break;
-                    case BamlRecordType.ConstructorParametersStart:
-                        record = new ConstructorParametersStartRecord();
-                        break;
-                    case BamlRecordType.ConstructorParametersEnd:
-                        record = new ConstructorParametersEndRecord();
-                        break;
-                    case BamlRecordType.ConstructorParameterType:
-                        record = new ConstructorParameterTypeRecord();
-                        break;
-                    case BamlRecordType.ConnectionId:
-                        record = new ConnectionIdRecord();
-                        break;
-                    case BamlRecordType.ContentProperty:
-                        record = new ContentPropertyRecord();
-                        break;
-                    case BamlRecordType.DefAttribute:
-                        record = new DefAttributeRecord();
-                        break;
-                    case BamlRecordType.DefAttributeKeyString:
-                        record = new DefAttributeKeyStringRecord();
-                        break;
-                    case BamlRecordType.DefAttributeKeyType:
-                        record = new DefAttributeKeyTypeRecord();
-                        break;
-                    case BamlRecordType.DeferableContentStart:
-                        record = new DeferableContentStartRecord();
-                        break;
-                    case BamlRecordType.DocumentEnd:
-                        record = new DocumentEndRecord();
-                        break;
-                    case BamlRecordType.DocumentStart:
-                        record = new DocumentStartRecord();
-                        break;
-                    case BamlRecordType.ElementEnd:
-                        record = new ElementEndRecord();
-                        break;
-                    case BamlRecordType.ElementStart:
-                        record = new ElementStartRecord();
-                        break;
-                    case BamlRecordType.KeyElementEnd:
-                        record = new KeyElementEndRecord();
-                        break;
-                    case BamlRecordType.KeyElementStart:
-                        record = new KeyElementStartRecord();
-                        break;
-                    case BamlRecordType.LineNumberAndPosition:
-                        record = new LineNumberAndPositionRecord();
-                        break;
-                    case BamlRecordType.LinePosition:
-                        record = new LinePositionRecord();
-                        break;
-                    case BamlRecordType.LiteralContent:
-                        record = new LiteralContentRecord();
-                        break;
-                    case BamlRecordType.NamedElementStart:
-                        record = new NamedElementStartRecord();
-                        break;
-                    case BamlRecordType.OptimizedStaticResource:
-                        record = new OptimizedStaticResourceRecord();
-                        break;
-                    case BamlRecordType.PIMapping:
-                        record = new PIMappingRecord();
-                        break;
-                    case BamlRecordType.PresentationOptionsAttribute:
-                        record = new PresentationOptionsAttributeRecord();
-                        break;
-                    case BamlRecordType.Property:
-                        record = new PropertyRecord();
-                        break;
-                    case BamlRecordType.PropertyArrayEnd:
-                        record = new PropertyArrayEndRecord();
-                        break;
-                    case BamlRecordType.PropertyArrayStart:
-                        record = new PropertyArrayStartRecord();
-                        break;
-                    case BamlRecordType.PropertyComplexEnd:
-                        record = new PropertyComplexEndRecord();
-                        break;
-                    case BamlRecordType.PropertyComplexStart:
-                        record = new PropertyComplexStartRecord();
-                        break;
-                    case BamlRecordType.PropertyCustom:
-                        record = new PropertyCustomRecord();
-                        break;
-                    case BamlRecordType.PropertyDictionaryEnd:
-                        record = new PropertyDictionaryEndRecord();
-                        break;
-                    case BamlRecordType.PropertyDictionaryStart:
-                        record = new PropertyDictionaryStartRecord();
-                        break;
-                    case BamlRecordType.PropertyListEnd:
-                        record = new PropertyListEndRecord();
-                        break;
-                    case BamlRecordType.PropertyListStart:
-                        record = new PropertyListStartRecord();
-                        break;
-                    case BamlRecordType.PropertyStringReference:
-                        record = new PropertyStringReferenceRecord();
-                        break;
-                    case BamlRecordType.PropertyTypeReference:
-                        record = new PropertyTypeReferenceRecord();
-                        break;
-                    case BamlRecordType.PropertyWithConverter:
-                        record = new PropertyWithConverterRecord();
-                        break;
-                    case BamlRecordType.PropertyWithExtension:
-                        record = new PropertyWithExtensionRecord();
-                        break;
-                    case BamlRecordType.PropertyWithStaticResourceId:
-                        record = new PropertyWithStaticResourceIdRecord();
-                        break;
-                    case BamlRecordType.RoutedEvent:
-                        record = new RoutedEventRecord();
-                        break;
-                    case BamlRecordType.StaticResourceEnd:
-                        record = new StaticResourceEndRecord();
-                        break;
-                    case BamlRecordType.StaticResourceId:
-                        record = new StaticResourceIdRecord();
-                        break;
-                    case BamlRecordType.StaticResourceStart:
-                        record = new StaticResourceStartRecord();
-                        break;
-                    case BamlRecordType.StringInfo:
-                        record = new StringInfoRecord();
-                        break;
-                    case BamlRecordType.Text:
-                        record = new TextRecord();
-                        break;
-                    case BamlRecordType.TextWithConverter:
-                        record = new TextWithConverterRecord();
-                        break;
-                    case BamlRecordType.TextWithId:
-                        record = new TextWithIdRecord();
-                        break;
-                    case BamlRecordType.TypeInfo:
-                        record = new TypeInfoRecord();
-                        break;
-                    case BamlRecordType.TypeSerializerInfo:
-                        record = new TypeSerializerInfoRecord();
-                        break;
-                    case BamlRecordType.XmlnsProperty:
-                        record = new XmlnsPropertyRecord();
-                        break;
-                    //case BamlRecordType.XmlAttribute:
-                    //case BamlRecordType.ProcessingInstruction:
-                    //case BamlRecordType.LastRecordType:
-                    //case BamlRecordType.EndAttributes:
-                    //case BamlRecordType.DefTag:
-                    //case BamlRecordType.ClrEvent:
-                    //case BamlRecordType.Comment:
-                    default:
-                        throw new NotSupportedException();
-                }
+
+                var record = BamlRecordFromType(type);
 
                 record.Position = pos;
                 record.Read(reader);
+
                 records.Add(record);
-                recordsByIndex.Add(pos, record);
+                recordsByPosition.Add(pos, record);
             }
 
             for (var i = 0; i < records.Count; i++)
             {
-                if (records[i] is IBamlDeferRecord defer)
-                {
-                    defer.ReadDefer(records, i, key => recordsByIndex[key]);
-                }
+                records[i]?.ReadDeferred(records, i, recordsByPosition);
             }
 
-            return document;
+            return records;
         }
 
-        public static void WriteDocument([NotNull] BamlDocument document, [NotNull] Stream stream)
+        public static void WriteDocument([NotNull, ItemNotNull] IList<BamlRecord> records, [NotNull] Stream stream)
         {
             var writer = new BamlBinaryWriter(stream);
+
+            writer.Write(_signature);
+
+            foreach (var record in records)
             {
-                var wtr = new BinaryWriter(stream, Encoding.Unicode);
-                var len = document.Signature.Length * 2;
-                wtr.Write(len);
-                wtr.Write(document.Signature.ToCharArray());
-                wtr.Write(new byte[((len + 3) & ~3) - len]);
+                record.Position = stream.Position;
+                writer.Write((byte)record.Type);
+                record.Write(writer);
             }
-            writer.Write(document.ReaderVersion.Major);
-            writer.Write(document.ReaderVersion.Minor);
-            writer.Write(document.UpdaterVersion.Major);
-            writer.Write(document.UpdaterVersion.Minor);
-            writer.Write(document.WriterVersion.Major);
-            writer.Write(document.WriterVersion.Minor);
-
-            var defers = new List<KeyValuePair<int, IBamlDeferRecord>>();
-
-            var records = document.Records;
 
             for (var i = 0; i < records.Count; i++)
             {
-                var rec = records[i];
-                rec.Position = stream.Position;
-                writer.Write((byte)rec.Type);
-                rec.Write(writer);
-
-                if (rec is IBamlDeferRecord deferRecord)
-                {
-                    defers.Add(new KeyValuePair<int, IBamlDeferRecord>(i, deferRecord));
-                }
+                var record = records[i];
+                record.WriteDeferred(records, i, writer);
             }
+        }
 
-            foreach (var defer in defers)
+        [NotNull]
+        private static BamlRecord BamlRecordFromType(BamlRecordType type)
+        {
+            switch (type)
             {
-                // ReSharper disable once PossibleNullReferenceException
-                defer.Value.WriteDefer(records, defer.Key, writer);
+                case BamlRecordType.AssemblyInfo:
+                    return new AssemblyInfoRecord();
+
+                case BamlRecordType.AttributeInfo:
+                    return new AttributeInfoRecord();
+
+                case BamlRecordType.ConstructorParametersStart:
+                    return new ConstructorParametersStartRecord();
+
+                case BamlRecordType.ConstructorParametersEnd:
+                    return new ConstructorParametersEndRecord();
+
+                case BamlRecordType.ConstructorParameterType:
+                    return new ConstructorParameterTypeRecord();
+
+                case BamlRecordType.ConnectionId:
+                    return new ConnectionIdRecord();
+
+                case BamlRecordType.ContentProperty:
+                    return new ContentPropertyRecord();
+
+                case BamlRecordType.DefAttribute:
+                    return new DefAttributeRecord();
+
+                case BamlRecordType.DefAttributeKeyString:
+                    return new DefAttributeKeyStringRecord();
+
+                case BamlRecordType.DefAttributeKeyType:
+                    return new DefAttributeKeyTypeRecord();
+
+                case BamlRecordType.DeferableContentStart:
+                    return new DeferableContentStartRecord();
+
+                case BamlRecordType.DocumentEnd:
+                    return new DocumentEndRecord();
+
+                case BamlRecordType.DocumentStart:
+                    return new DocumentStartRecord();
+
+                case BamlRecordType.ElementEnd:
+                    return new ElementEndRecord();
+
+                case BamlRecordType.ElementStart:
+                    return new ElementStartRecord();
+
+                case BamlRecordType.KeyElementEnd:
+                    return new KeyElementEndRecord();
+
+                case BamlRecordType.KeyElementStart:
+                    return new KeyElementStartRecord();
+
+                case BamlRecordType.LineNumberAndPosition:
+                    return new LineNumberAndPositionRecord();
+
+                case BamlRecordType.LinePosition:
+                    return new LinePositionRecord();
+
+                case BamlRecordType.LiteralContent:
+                    return new LiteralContentRecord();
+
+                case BamlRecordType.NamedElementStart:
+                    return new NamedElementStartRecord();
+
+                case BamlRecordType.OptimizedStaticResource:
+                    return new OptimizedStaticResourceRecord();
+
+                case BamlRecordType.PIMapping:
+                    return new PIMappingRecord();
+
+                case BamlRecordType.PresentationOptionsAttribute:
+                    return new PresentationOptionsAttributeRecord();
+
+                case BamlRecordType.Property:
+                    return new PropertyRecord();
+
+                case BamlRecordType.PropertyArrayEnd:
+                    return new PropertyArrayEndRecord();
+
+                case BamlRecordType.PropertyArrayStart:
+                    return new PropertyArrayStartRecord();
+
+                case BamlRecordType.PropertyComplexEnd:
+                    return new PropertyComplexEndRecord();
+
+                case BamlRecordType.PropertyComplexStart:
+                    return new PropertyComplexStartRecord();
+
+                case BamlRecordType.PropertyCustom:
+                    return new PropertyCustomRecord();
+
+                case BamlRecordType.PropertyDictionaryEnd:
+                    return new PropertyDictionaryEndRecord();
+
+                case BamlRecordType.PropertyDictionaryStart:
+                    return new PropertyDictionaryStartRecord();
+
+                case BamlRecordType.PropertyListEnd:
+                    return new PropertyListEndRecord();
+
+                case BamlRecordType.PropertyListStart:
+                    return new PropertyListStartRecord();
+
+                case BamlRecordType.PropertyStringReference:
+                    return new PropertyStringReferenceRecord();
+
+                case BamlRecordType.PropertyTypeReference:
+                    return new PropertyTypeReferenceRecord();
+
+                case BamlRecordType.PropertyWithConverter:
+                    return new PropertyWithConverterRecord();
+
+                case BamlRecordType.PropertyWithExtension:
+                    return new PropertyWithExtensionRecord();
+
+                case BamlRecordType.PropertyWithStaticResourceId:
+                    return new PropertyWithStaticResourceIdRecord();
+
+                case BamlRecordType.RoutedEvent:
+                    return new RoutedEventRecord();
+
+                case BamlRecordType.StaticResourceEnd:
+                    return new StaticResourceEndRecord();
+
+                case BamlRecordType.StaticResourceId:
+                    return new StaticResourceIdRecord();
+
+                case BamlRecordType.StaticResourceStart:
+                    return new StaticResourceStartRecord();
+
+                case BamlRecordType.StringInfo:
+                    return new StringInfoRecord();
+
+                case BamlRecordType.Text:
+                    return new TextRecord();
+
+                case BamlRecordType.TextWithConverter:
+                    return new TextWithConverterRecord();
+
+                case BamlRecordType.TextWithId:
+                    return new TextWithIdRecord();
+
+                case BamlRecordType.TypeInfo:
+                    return new TypeInfoRecord();
+
+                case BamlRecordType.TypeSerializerInfo:
+                    return new TypeSerializerInfoRecord();
+
+                case BamlRecordType.XmlnsProperty:
+                    return new XmlnsPropertyRecord();
+
+                //case BamlRecordType.XmlAttribute:
+                //case BamlRecordType.ProcessingInstruction:
+                //case BamlRecordType.LastRecordType:
+                //case BamlRecordType.EndAttributes:
+                //case BamlRecordType.DefTag:
+                //case BamlRecordType.ClrEvent:
+                //case BamlRecordType.Comment:
+                default:
+                    throw new NotSupportedException("Unsupported record type: " + type);
             }
         }
     }
