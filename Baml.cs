@@ -130,7 +130,7 @@ namespace Baml
                 else if (IsFooter(record))
                 {
                     if (current == null)
-                        throw new Exception("Unexpected footer.");
+                        throw new InvalidOperationException("Unexpected footer.");
 
                     // ReSharper disable once PossibleNullReferenceException
                     while (!IsMatch(current.Header, record))
@@ -146,7 +146,7 @@ namespace Baml
                 else
                 {
                     if (current == null)
-                        throw new Exception("Unexpected record.");
+                        throw new InvalidOperationException("Unexpected record.");
 
                     current.Body.Add(record);
                 }
@@ -288,7 +288,7 @@ namespace Baml
             Debug.Assert(reader.BaseStream.Position - pos == size);
         }
 
-        private int SizeofEncodedInt(int val)
+        private static int SizeofEncodedInt(int val)
         {
             if ((val & ~0x7F) == 0)
             {
