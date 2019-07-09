@@ -105,6 +105,7 @@ namespace Baml
             }
         }
 
+        [CanBeNull]
         public static BamlElement Read([NotNull, ItemNotNull] IList<BamlRecord> records)
         {
             Debug.Assert(records.Count > 0 && records[0].Type == BamlRecordType.DocumentStart);
@@ -562,7 +563,7 @@ namespace Baml
 
         public ushort TypeId { get; set; }
         public ushort AssemblyId { get; set; }
-        
+
         [NotNull]
         public string TypeFullName { get; set; } = string.Empty;
 
@@ -1254,7 +1255,7 @@ namespace Baml
         private static readonly byte[] _signature =
         {
             0x0C, 0x00, 0x00, 0x00, // strlen
-            
+
             (byte)'M', 0x00,
             (byte)'S', 0x00,
             (byte)'B', 0x00,
