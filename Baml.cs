@@ -28,89 +28,67 @@ namespace Baml
         [NotNull, ItemNotNull]
         public IList<BamlElement> Children { get; } = new List<BamlElement>();
 
-        public BamlElement Parent { get; private set; }
-        public BamlRecord Footer { get; private set; }
+        public BamlElement? Parent { get; private set; }
+        public BamlRecord? Footer { get; private set; }
 
         private static bool IsHeader([NotNull] BamlRecord rec)
         {
-            switch (rec.Type)
+            return rec.Type switch
             {
-                case BamlRecordType.ConstructorParametersStart:
-                case BamlRecordType.DocumentStart:
-                case BamlRecordType.ElementStart:
-                case BamlRecordType.KeyElementStart:
-                case BamlRecordType.NamedElementStart:
-                case BamlRecordType.PropertyArrayStart:
-                case BamlRecordType.PropertyComplexStart:
-                case BamlRecordType.PropertyDictionaryStart:
-                case BamlRecordType.PropertyListStart:
-                case BamlRecordType.StaticResourceStart:
-                    return true;
-            }
-            return false;
+                BamlRecordType.ConstructorParametersStart => true,
+                BamlRecordType.DocumentStart => true,
+                BamlRecordType.ElementStart => true,
+                BamlRecordType.KeyElementStart => true,
+                BamlRecordType.NamedElementStart => true,
+                BamlRecordType.PropertyArrayStart => true,
+                BamlRecordType.PropertyComplexStart => true,
+                BamlRecordType.PropertyDictionaryStart => true,
+                BamlRecordType.PropertyListStart => true,
+                BamlRecordType.StaticResourceStart => true,
+                _ => false
+            };
         }
 
         private static bool IsFooter([NotNull] BamlRecord rec)
         {
-            switch (rec.Type)
+            return rec.Type switch
             {
-                case BamlRecordType.ConstructorParametersEnd:
-                case BamlRecordType.DocumentEnd:
-                case BamlRecordType.ElementEnd:
-                case BamlRecordType.KeyElementEnd:
-                case BamlRecordType.PropertyArrayEnd:
-                case BamlRecordType.PropertyComplexEnd:
-                case BamlRecordType.PropertyDictionaryEnd:
-                case BamlRecordType.PropertyListEnd:
-                case BamlRecordType.StaticResourceEnd:
-                    return true;
-            }
-            return false;
+                BamlRecordType.ConstructorParametersEnd => true,
+                BamlRecordType.DocumentEnd => true,
+                BamlRecordType.ElementEnd => true,
+                BamlRecordType.KeyElementEnd => true,
+                BamlRecordType.PropertyArrayEnd => true,
+                BamlRecordType.PropertyComplexEnd => true,
+                BamlRecordType.PropertyDictionaryEnd => true,
+                BamlRecordType.PropertyListEnd => true,
+                BamlRecordType.StaticResourceEnd => true,
+                _ => false
+            };
         }
 
         private static bool IsMatch([NotNull] BamlRecord header, [NotNull] BamlRecord footer)
         {
-            switch (header.Type)
+            return header.Type switch
             {
-                case BamlRecordType.ConstructorParametersStart:
-                    return footer.Type == BamlRecordType.ConstructorParametersEnd;
-
-                case BamlRecordType.DocumentStart:
-                    return footer.Type == BamlRecordType.DocumentEnd;
-
-                case BamlRecordType.KeyElementStart:
-                    return footer.Type == BamlRecordType.KeyElementEnd;
-
-                case BamlRecordType.PropertyArrayStart:
-                    return footer.Type == BamlRecordType.PropertyArrayEnd;
-
-                case BamlRecordType.PropertyComplexStart:
-                    return footer.Type == BamlRecordType.PropertyComplexEnd;
-
-                case BamlRecordType.PropertyDictionaryStart:
-                    return footer.Type == BamlRecordType.PropertyDictionaryEnd;
-
-                case BamlRecordType.PropertyListStart:
-                    return footer.Type == BamlRecordType.PropertyListEnd;
-
-                case BamlRecordType.StaticResourceStart:
-                    return footer.Type == BamlRecordType.StaticResourceEnd;
-
-                case BamlRecordType.ElementStart:
-                case BamlRecordType.NamedElementStart:
-                    return footer.Type == BamlRecordType.ElementEnd;
-
-                default:
-                    return false;
-            }
+                BamlRecordType.ConstructorParametersStart => footer.Type == BamlRecordType.ConstructorParametersEnd,
+                BamlRecordType.DocumentStart => footer.Type == BamlRecordType.DocumentEnd,
+                BamlRecordType.KeyElementStart => footer.Type == BamlRecordType.KeyElementEnd,
+                BamlRecordType.PropertyArrayStart => footer.Type == BamlRecordType.PropertyArrayEnd,
+                BamlRecordType.PropertyComplexStart => footer.Type == BamlRecordType.PropertyComplexEnd,
+                BamlRecordType.PropertyDictionaryStart => footer.Type == BamlRecordType.PropertyDictionaryEnd,
+                BamlRecordType.PropertyListStart => footer.Type == BamlRecordType.PropertyListEnd,
+                BamlRecordType.StaticResourceStart => footer.Type == BamlRecordType.StaticResourceEnd,
+                BamlRecordType.ElementStart => footer.Type == BamlRecordType.ElementEnd,
+                BamlRecordType.NamedElementStart => footer.Type == BamlRecordType.ElementEnd,
+                _ => false
+            };
         }
 
-        [CanBeNull]
-        public static BamlElement Read([NotNull, ItemNotNull] IList<BamlRecord> records)
+        public static BamlElement? Read([NotNull, ItemNotNull] IList<BamlRecord> records)
         {
             Debug.Assert(records.Count > 0 && records[0].Type == BamlRecordType.DocumentStart);
 
-            BamlElement current = null;
+            BamlElement? current = null;
             var stack = new Stack<BamlElement>();
 
             foreach (var record in records)
@@ -519,7 +497,7 @@ namespace Baml
         public bool Shared { get; set; }
         public bool SharedSet { get; set; }
 
-        public BamlRecord Record { get; set; }
+        public BamlRecord? Record { get; set; }
 
         public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
@@ -943,7 +921,7 @@ namespace Baml
         public bool Shared { get; set; }
         public bool SharedSet { get; set; }
 
-        public BamlRecord Record { get; set; }
+        public BamlRecord? Record { get; set; }
 
         public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
@@ -1085,7 +1063,7 @@ namespace Baml
 
         public override BamlRecordType Type => BamlRecordType.DeferableContentStart;
 
-        public BamlRecord Record { get; set; }
+        public BamlRecord? Record { get; set; }
 
         public override void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition)
         {
@@ -1205,7 +1183,7 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.NamedElementStart;
 
-        public string RuntimeName { get; set; }
+        public string? RuntimeName { get; set; }
 
         public override void Read(BamlBinaryReader reader)
         {
@@ -1326,168 +1304,60 @@ namespace Baml
         [NotNull]
         private static BamlRecord BamlRecordFromType(BamlRecordType type)
         {
-            switch (type)
+            return type switch
             {
-                case BamlRecordType.AssemblyInfo:
-                    return new AssemblyInfoRecord();
-
-                case BamlRecordType.AttributeInfo:
-                    return new AttributeInfoRecord();
-
-                case BamlRecordType.ConstructorParametersStart:
-                    return new ConstructorParametersStartRecord();
-
-                case BamlRecordType.ConstructorParametersEnd:
-                    return new ConstructorParametersEndRecord();
-
-                case BamlRecordType.ConstructorParameterType:
-                    return new ConstructorParameterTypeRecord();
-
-                case BamlRecordType.ConnectionId:
-                    return new ConnectionIdRecord();
-
-                case BamlRecordType.ContentProperty:
-                    return new ContentPropertyRecord();
-
-                case BamlRecordType.DefAttribute:
-                    return new DefAttributeRecord();
-
-                case BamlRecordType.DefAttributeKeyString:
-                    return new DefAttributeKeyStringRecord();
-
-                case BamlRecordType.DefAttributeKeyType:
-                    return new DefAttributeKeyTypeRecord();
-
-                case BamlRecordType.DeferableContentStart:
-                    return new DeferableContentStartRecord();
-
-                case BamlRecordType.DocumentEnd:
-                    return new DocumentEndRecord();
-
-                case BamlRecordType.DocumentStart:
-                    return new DocumentStartRecord();
-
-                case BamlRecordType.ElementEnd:
-                    return new ElementEndRecord();
-
-                case BamlRecordType.ElementStart:
-                    return new ElementStartRecord();
-
-                case BamlRecordType.KeyElementEnd:
-                    return new KeyElementEndRecord();
-
-                case BamlRecordType.KeyElementStart:
-                    return new KeyElementStartRecord();
-
-                case BamlRecordType.LineNumberAndPosition:
-                    return new LineNumberAndPositionRecord();
-
-                case BamlRecordType.LinePosition:
-                    return new LinePositionRecord();
-
-                case BamlRecordType.LiteralContent:
-                    return new LiteralContentRecord();
-
-                case BamlRecordType.NamedElementStart:
-                    return new NamedElementStartRecord();
-
-                case BamlRecordType.OptimizedStaticResource:
-                    return new OptimizedStaticResourceRecord();
-
-                case BamlRecordType.PIMapping:
-                    return new PIMappingRecord();
-
-                case BamlRecordType.PresentationOptionsAttribute:
-                    return new PresentationOptionsAttributeRecord();
-
-                case BamlRecordType.Property:
-                    return new PropertyRecord();
-
-                case BamlRecordType.PropertyArrayEnd:
-                    return new PropertyArrayEndRecord();
-
-                case BamlRecordType.PropertyArrayStart:
-                    return new PropertyArrayStartRecord();
-
-                case BamlRecordType.PropertyComplexEnd:
-                    return new PropertyComplexEndRecord();
-
-                case BamlRecordType.PropertyComplexStart:
-                    return new PropertyComplexStartRecord();
-
-                case BamlRecordType.PropertyCustom:
-                    return new PropertyCustomRecord();
-
-                case BamlRecordType.PropertyDictionaryEnd:
-                    return new PropertyDictionaryEndRecord();
-
-                case BamlRecordType.PropertyDictionaryStart:
-                    return new PropertyDictionaryStartRecord();
-
-                case BamlRecordType.PropertyListEnd:
-                    return new PropertyListEndRecord();
-
-                case BamlRecordType.PropertyListStart:
-                    return new PropertyListStartRecord();
-
-                case BamlRecordType.PropertyStringReference:
-                    return new PropertyStringReferenceRecord();
-
-                case BamlRecordType.PropertyTypeReference:
-                    return new PropertyTypeReferenceRecord();
-
-                case BamlRecordType.PropertyWithConverter:
-                    return new PropertyWithConverterRecord();
-
-                case BamlRecordType.PropertyWithExtension:
-                    return new PropertyWithExtensionRecord();
-
-                case BamlRecordType.PropertyWithStaticResourceId:
-                    return new PropertyWithStaticResourceIdRecord();
-
-                case BamlRecordType.RoutedEvent:
-                    return new RoutedEventRecord();
-
-                case BamlRecordType.StaticResourceEnd:
-                    return new StaticResourceEndRecord();
-
-                case BamlRecordType.StaticResourceId:
-                    return new StaticResourceIdRecord();
-
-                case BamlRecordType.StaticResourceStart:
-                    return new StaticResourceStartRecord();
-
-                case BamlRecordType.StringInfo:
-                    return new StringInfoRecord();
-
-                case BamlRecordType.Text:
-                    return new TextRecord();
-
-                case BamlRecordType.TextWithConverter:
-                    return new TextWithConverterRecord();
-
-                case BamlRecordType.TextWithId:
-                    return new TextWithIdRecord();
-
-                case BamlRecordType.TypeInfo:
-                    return new TypeInfoRecord();
-
-                case BamlRecordType.TypeSerializerInfo:
-                    return new TypeSerializerInfoRecord();
-
-                case BamlRecordType.XmlnsProperty:
-                    return new XmlnsPropertyRecord();
-
-                //case BamlRecordType.XmlAttribute:
-                //case BamlRecordType.ProcessingInstruction:
-                //case BamlRecordType.LastRecordType:
-                //case BamlRecordType.EndAttributes:
-                //case BamlRecordType.DefTag:
-                //case BamlRecordType.ClrEvent:
-                //case BamlRecordType.Comment:
-                default:
-                    throw new NotSupportedException("Unsupported record type: " + type);
-            }
+                BamlRecordType.AssemblyInfo => new AssemblyInfoRecord(),
+                BamlRecordType.AttributeInfo => new AttributeInfoRecord(),
+                BamlRecordType.ConstructorParametersStart => new ConstructorParametersStartRecord(),
+                BamlRecordType.ConstructorParametersEnd => new ConstructorParametersEndRecord(),
+                BamlRecordType.ConstructorParameterType => new ConstructorParameterTypeRecord(),
+                BamlRecordType.ConnectionId => new ConnectionIdRecord(),
+                BamlRecordType.ContentProperty => new ContentPropertyRecord(),
+                BamlRecordType.DefAttribute => new DefAttributeRecord(),
+                BamlRecordType.DefAttributeKeyString => new DefAttributeKeyStringRecord(),
+                BamlRecordType.DefAttributeKeyType => new DefAttributeKeyTypeRecord(),
+                BamlRecordType.DeferableContentStart => new DeferableContentStartRecord(),
+                BamlRecordType.DocumentEnd => new DocumentEndRecord(),
+                BamlRecordType.DocumentStart => new DocumentStartRecord(),
+                BamlRecordType.ElementEnd => new ElementEndRecord(),
+                BamlRecordType.ElementStart => new ElementStartRecord(),
+                BamlRecordType.KeyElementEnd => new KeyElementEndRecord(),
+                BamlRecordType.KeyElementStart => new KeyElementStartRecord(),
+                BamlRecordType.LineNumberAndPosition => new LineNumberAndPositionRecord(),
+                BamlRecordType.LinePosition => new LinePositionRecord(),
+                BamlRecordType.LiteralContent => new LiteralContentRecord(),
+                BamlRecordType.NamedElementStart => new NamedElementStartRecord(),
+                BamlRecordType.OptimizedStaticResource => new OptimizedStaticResourceRecord(),
+                BamlRecordType.PIMapping => new PIMappingRecord(),
+                BamlRecordType.PresentationOptionsAttribute => new PresentationOptionsAttributeRecord(),
+                BamlRecordType.Property => new PropertyRecord(),
+                BamlRecordType.PropertyArrayEnd => new PropertyArrayEndRecord(),
+                BamlRecordType.PropertyArrayStart => new PropertyArrayStartRecord(),
+                BamlRecordType.PropertyComplexEnd => new PropertyComplexEndRecord(),
+                BamlRecordType.PropertyComplexStart => new PropertyComplexStartRecord(),
+                BamlRecordType.PropertyCustom => new PropertyCustomRecord(),
+                BamlRecordType.PropertyDictionaryEnd => new PropertyDictionaryEndRecord(),
+                BamlRecordType.PropertyDictionaryStart => new PropertyDictionaryStartRecord(),
+                BamlRecordType.PropertyListEnd => new PropertyListEndRecord(),
+                BamlRecordType.PropertyListStart => new PropertyListStartRecord(),
+                BamlRecordType.PropertyStringReference => new PropertyStringReferenceRecord(),
+                BamlRecordType.PropertyTypeReference => new PropertyTypeReferenceRecord(),
+                BamlRecordType.PropertyWithConverter => new PropertyWithConverterRecord(),
+                BamlRecordType.PropertyWithExtension => new PropertyWithExtensionRecord(),
+                BamlRecordType.PropertyWithStaticResourceId => new PropertyWithStaticResourceIdRecord(),
+                BamlRecordType.RoutedEvent => new RoutedEventRecord(),
+                BamlRecordType.StaticResourceEnd => new StaticResourceEndRecord(),
+                BamlRecordType.StaticResourceId => new StaticResourceIdRecord(),
+                BamlRecordType.StaticResourceStart => new StaticResourceStartRecord(),
+                BamlRecordType.StringInfo => new StringInfoRecord(),
+                BamlRecordType.Text => new TextRecord(),
+                BamlRecordType.TextWithConverter => new TextWithConverterRecord(),
+                BamlRecordType.TextWithId => new TextWithIdRecord(),
+                BamlRecordType.TypeInfo => new TypeInfoRecord(),
+                BamlRecordType.TypeSerializerInfo => new TypeSerializerInfoRecord(),
+                BamlRecordType.XmlnsProperty => new XmlnsPropertyRecord(),
+                _ => throw new NotSupportedException("Unsupported record type: " + type)
+            };
         }
     }
 }
