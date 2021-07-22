@@ -12,26 +12,21 @@ namespace Baml
     using System.IO;
     using System.Linq;
 
-    using JetBrains.Annotations;
-
     internal class BamlElement
     {
-        public BamlElement([NotNull] BamlRecord header)
+        public BamlElement(BamlRecord header)
         {
             Header = header;
         }
 
-        [NotNull]
         public BamlRecord Header { get; }
-        [NotNull, ItemNotNull]
         public IList<BamlRecord> Body { get; } = new List<BamlRecord>();
-        [NotNull, ItemNotNull]
         public IList<BamlElement> Children { get; } = new List<BamlElement>();
 
         public BamlElement? Parent { get; private set; }
         public BamlRecord? Footer { get; private set; }
 
-        private static bool IsHeader([NotNull] BamlRecord rec)
+        private static bool IsHeader(BamlRecord rec)
         {
             return rec.Type switch
             {
@@ -49,7 +44,7 @@ namespace Baml
             };
         }
 
-        private static bool IsFooter([NotNull] BamlRecord rec)
+        private static bool IsFooter(BamlRecord rec)
         {
             return rec.Type switch
             {
@@ -66,7 +61,7 @@ namespace Baml
             };
         }
 
-        private static bool IsMatch([NotNull] BamlRecord header, [NotNull] BamlRecord footer)
+        private static bool IsMatch(BamlRecord header, BamlRecord footer)
         {
             return header.Type switch
             {
@@ -84,7 +79,7 @@ namespace Baml
             };
         }
 
-        public static BamlElement? Read([NotNull, ItemNotNull] IList<BamlRecord> records)
+        public static BamlElement? Read(IList<BamlRecord> records)
         {
             Debug.Assert(records.Count > 0 && records[0].Type == BamlRecordType.DocumentStart);
 
@@ -204,10 +199,10 @@ namespace Baml
         public abstract void Read(BamlBinaryReader reader);
         public abstract void Write(BamlBinaryWriter writer);
 
-        public virtual void ReadDeferred([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] IDictionary<long, BamlRecord> recordsByPosition) { }
-        public virtual void WriteDeferred([NotNull, ItemNotNull] IList<BamlRecord> records, int index, [NotNull] BamlBinaryWriter writer) { }
+        public virtual void ReadDeferred(IList<BamlRecord> records, int index, IDictionary<long, BamlRecord> recordsByPosition) { }
+        public virtual void WriteDeferred(IList<BamlRecord> records, int index, BamlBinaryWriter writer) { }
 
-        protected static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, ref int index)
+        protected static void NavigateTree(IList<BamlRecord> records, ref int index)
         {
             while (true)
             {
@@ -234,7 +229,7 @@ namespace Baml
             }
         }
 
-        private static void NavigateTree([NotNull, ItemNotNull] IList<BamlRecord> records, BamlRecordType start, BamlRecordType end, ref int index)
+        private static void NavigateTree(IList<BamlRecord> records, BamlRecordType start, BamlRecordType end, ref int index)
         {
             index++;
 
@@ -258,7 +253,7 @@ namespace Baml
 
     internal abstract class SizedBamlRecord : BamlRecord
     {
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             var pos = reader.BaseStream.Position;
             var size = reader.ReadEncodedInt();
@@ -288,7 +283,7 @@ namespace Baml
             return 5;
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             var pos = writer.BaseStream.Position;
             WriteData(writer);
@@ -307,14 +302,11 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.XmlnsProperty;
 
-        [NotNull]
         public string Prefix { get; set; } = string.Empty;
-        [NotNull]
         public string XmlNamespace { get; set; } = string.Empty;
-        [NotNull]
         public ushort[] AssemblyIds { get; set; } = Array.Empty<ushort>();
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             Prefix = reader.ReadString();
             XmlNamespace = reader.ReadString();
@@ -323,7 +315,7 @@ namespace Baml
                 AssemblyIds[i] = reader.ReadUInt16();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Prefix);
             writer.Write(XmlNamespace);
@@ -337,17 +329,16 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.PresentationOptionsAttribute;
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
         public ushort NameId { get; set; }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             Value = reader.ReadString();
             NameId = reader.ReadUInt16();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Value);
             writer.Write(NameId);
@@ -358,20 +349,18 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.PIMapping;
 
-        [NotNull]
         public string XmlNamespace { get; set; } = string.Empty;
-        [NotNull]
         public string ClrNamespace { get; set; } = string.Empty;
         public ushort AssemblyId { get; set; }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             XmlNamespace = reader.ReadString();
             ClrNamespace = reader.ReadString();
             AssemblyId = reader.ReadUInt16();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(XmlNamespace);
             writer.Write(ClrNamespace);
@@ -384,16 +373,15 @@ namespace Baml
         public override BamlRecordType Type => BamlRecordType.AssemblyInfo;
 
         public ushort AssemblyId { get; set; }
-        [NotNull]
         public string AssemblyFullName { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             AssemblyId = reader.ReadUInt16();
             AssemblyFullName = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(AssemblyId);
             writer.Write(AssemblyFullName);
@@ -406,16 +394,15 @@ namespace Baml
 
         public ushort AttributeId { get; set; }
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             AttributeId = reader.ReadUInt16();
             Value = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
             writer.Write(Value);
@@ -447,10 +434,9 @@ namespace Baml
 
         public ushort AttributeId { get; set; }
         public ushort SerializerTypeId { get; set; }
-        [NotNull]
         public byte[] Data { get; set; } = Array.Empty<byte>();
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             var pos = reader.BaseStream.Position;
             AttributeId = reader.ReadUInt16();
@@ -458,7 +444,7 @@ namespace Baml
             Data = reader.ReadBytes(size - (int)(reader.BaseStream.Position - pos));
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
             writer.Write(SerializerTypeId);
@@ -470,17 +456,16 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.DefAttribute;
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
         public ushort NameId { get; set; }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             Value = reader.ReadString();
             NameId = reader.ReadUInt16();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Value);
             writer.Write(NameId);
@@ -517,7 +502,7 @@ namespace Baml
             writer.Write((uint)(Record.Position - records[index].Position));
         }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             ValueId = reader.ReadUInt16();
             _position = reader.ReadUInt32();
@@ -525,7 +510,7 @@ namespace Baml
             SharedSet = reader.ReadBoolean();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(ValueId);
             _position = (uint)writer.BaseStream.Position;
@@ -542,17 +527,16 @@ namespace Baml
         public ushort TypeId { get; set; }
         public ushort AssemblyId { get; set; }
 
-        [NotNull]
         public string TypeFullName { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             TypeId = reader.ReadUInt16();
             AssemblyId = reader.ReadUInt16();
             TypeFullName = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(TypeId);
             writer.Write(AssemblyId);
@@ -586,10 +570,9 @@ namespace Baml
         public ushort AttributeId { get; set; }
         public ushort OwnerTypeId { get; set; }
         public byte AttributeUsage { get; set; }
-        [NotNull]
         public string Name { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             AttributeId = reader.ReadUInt16();
             OwnerTypeId = reader.ReadUInt16();
@@ -597,7 +580,7 @@ namespace Baml
             Name = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
             writer.Write(OwnerTypeId);
@@ -611,16 +594,15 @@ namespace Baml
         public override BamlRecordType Type => BamlRecordType.StringInfo;
 
         public ushort StringId { get; set; }
-        [NotNull]
         public string Value { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             StringId = reader.ReadUInt16();
             Value = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(StringId);
             writer.Write(Value);
@@ -631,15 +613,14 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.Text;
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             Value = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Value);
         }
@@ -685,19 +666,18 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.LiteralContent;
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
         public uint Reserved0 { get; set; }
         public uint Reserved1 { get; set; }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             Value = reader.ReadString();
             Reserved0 = reader.ReadUInt32();
             Reserved1 = reader.ReadUInt32();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Value);
             writer.Write(Reserved0);
@@ -709,17 +689,16 @@ namespace Baml
     {
         public override BamlRecordType Type => BamlRecordType.RoutedEvent;
 
-        [NotNull]
         public string Value { get; set; } = string.Empty;
         public ushort AttributeId { get; set; }
 
-        protected override void ReadData([NotNull] BamlBinaryReader reader, int size)
+        protected override void ReadData(BamlBinaryReader reader, int size)
         {
             AttributeId = reader.ReadUInt16();
             Value = reader.ReadString();
         }
 
-        protected override void WriteData([NotNull] BamlBinaryWriter writer)
+        protected override void WriteData(BamlBinaryWriter writer)
         {
             writer.Write(Value);
             writer.Write(AttributeId);
@@ -734,14 +713,14 @@ namespace Baml
         public uint MaxAsyncRecords { get; set; }
         public bool DebugBaml { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             LoadAsync = reader.ReadBoolean();
             MaxAsyncRecords = reader.ReadUInt32();
             DebugBaml = reader.ReadBoolean();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(LoadAsync);
             writer.Write(MaxAsyncRecords);
@@ -764,13 +743,13 @@ namespace Baml
         public ushort TypeId { get; set; }
         public byte Flags { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             TypeId = reader.ReadUInt16();
             Flags = reader.ReadByte();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(TypeId);
             writer.Write(Flags);
@@ -804,12 +783,12 @@ namespace Baml
 
         public uint ConnectionId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             ConnectionId = reader.ReadUInt32();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(ConnectionId);
         }
@@ -823,14 +802,14 @@ namespace Baml
         public ushort Flags { get; set; }
         public ushort ValueId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             AttributeId = reader.ReadUInt16();
             Flags = reader.ReadUInt16();
             ValueId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
             writer.Write(Flags);
@@ -901,12 +880,12 @@ namespace Baml
 
         public ushort AttributeId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             AttributeId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
         }
@@ -1004,12 +983,12 @@ namespace Baml
 
         public ushort AttributeId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             AttributeId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(AttributeId);
         }
@@ -1045,12 +1024,12 @@ namespace Baml
 
         public ushort TypeId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             TypeId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(TypeId);
         }
@@ -1079,13 +1058,13 @@ namespace Baml
             writer.Write((uint)(Record.Position - (pos + 4)));
         }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             size = reader.ReadUInt32();
             pos = reader.BaseStream.Position;
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             pos = writer.BaseStream.Position;
             writer.Write((uint)0);
@@ -1111,12 +1090,12 @@ namespace Baml
 
         public ushort StaticResourceId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             StaticResourceId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(StaticResourceId);
         }
@@ -1129,13 +1108,13 @@ namespace Baml
         public byte Flags { get; set; }
         public ushort ValueId { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             Flags = reader.ReadByte();
             ValueId = reader.ReadUInt16();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(Flags);
             writer.Write(ValueId);
@@ -1149,13 +1128,13 @@ namespace Baml
         public uint LineNumber { get; set; }
         public uint LinePosition { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             LineNumber = reader.ReadUInt32();
             LinePosition = reader.ReadUInt32();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(LineNumber);
             writer.Write(LinePosition);
@@ -1168,12 +1147,12 @@ namespace Baml
 
         public uint LinePosition { get; set; }
 
-        public override void Read([NotNull] BamlBinaryReader reader)
+        public override void Read(BamlBinaryReader reader)
         {
             LinePosition = reader.ReadUInt32();
         }
 
-        public override void Write([NotNull] BamlBinaryWriter writer)
+        public override void Write(BamlBinaryWriter writer)
         {
             writer.Write(LinePosition);
         }
@@ -1203,7 +1182,7 @@ namespace Baml
 
     internal class BamlBinaryReader : BinaryReader
     {
-        public BamlBinaryReader([NotNull] Stream stream)
+        public BamlBinaryReader(Stream stream)
             : base(stream)
         {
         }
@@ -1216,7 +1195,7 @@ namespace Baml
 
     internal class BamlBinaryWriter : BinaryWriter
     {
-        public BamlBinaryWriter([NotNull] Stream stream)
+        public BamlBinaryWriter(Stream stream)
             : base(stream)
         {
         }
@@ -1229,7 +1208,6 @@ namespace Baml
 
     internal static class Baml
     {
-        [NotNull]
         private static readonly byte[] _signature =
         {
             0x0C, 0x00, 0x00, 0x00, // strlen
@@ -1246,8 +1224,7 @@ namespace Baml
             0x00, 0x00, 0x60, 0x00, // writer version
         };
 
-        [NotNull]
-        public static IList<BamlRecord> ReadDocument([NotNull] Stream stream)
+        public static IList<BamlRecord> ReadDocument(Stream stream)
         {
             var reader = new BamlBinaryReader(stream);
 
@@ -1281,7 +1258,7 @@ namespace Baml
             return records;
         }
 
-        public static void WriteDocument([NotNull, ItemNotNull] IList<BamlRecord> records, [NotNull] Stream stream)
+        public static void WriteDocument(IList<BamlRecord> records, Stream stream)
         {
             var writer = new BamlBinaryWriter(stream);
 
@@ -1301,7 +1278,6 @@ namespace Baml
             }
         }
 
-        [NotNull]
         private static BamlRecord BamlRecordFromType(BamlRecordType type)
         {
             return type switch
